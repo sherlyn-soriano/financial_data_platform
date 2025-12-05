@@ -1,0 +1,10 @@
+name: credicorp-de-platform
+runtime: python
+description: Credicorp Transaction Intelligence Platform - Complete Azure infraestructure 
+
+
+config:
+  azure-native:location:
+   description: Azure region for all resources
+   default: eastus2
+   
