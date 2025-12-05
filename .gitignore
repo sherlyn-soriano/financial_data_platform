@@ -1,0 +1,13 @@
+# Python
+.venv/
+venv/
+___pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+#Envs /secrets
+.env
+.env.*
+*.env
+
