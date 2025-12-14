@@ -5,7 +5,6 @@ import requests
 from azure.storage.blob import BlobServiceClient
 from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv
-import json
 
 load_dotenv()
 
@@ -19,22 +18,14 @@ def get_blob_service_client():
         return BlobServiceClient(account_url, credential=credential)
     except Exception as e:
         print(f"DefaultAzureCredential failed: {e}")
+        
         print("Trying connection string")
-
-        # 1) Use manually provided connection string if present
-        conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+        conn_str = build_connection_string_from_azure()
         if not conn_str:
-            # 2) Derive connection string automatically from Storage keys via ARM
-            conn_str = build_connection_string_from_azure()
-        if not conn_str:
-            raise RuntimeError(
-                "No connection string available and MSI/service principal auth failed"
-            )
+            raise RuntimeError("All authentication methods failed")
         return BlobServiceClient.from_connection_string(conn_str)
 
-
 def build_connection_string_from_azure() -> Optional[str]:
-    """Fetch account keys via ARM and build a connection string (avoids manual copy/paste)."""
     subscription_id = os.getenv("AZURE_SUBSCRIPTION_ID")
     resource_group = os.getenv("RESOURCE_GROUP_NAME") or (
         f"rg-{os.getenv('PROJECT_NAME')}-{os.getenv('ENVIRONMENT')}"
@@ -59,7 +50,7 @@ def build_connection_string_from_azure() -> Optional[str]:
         resp.raise_for_status()
         keys = resp.json().get("keys", [])
         if not keys:
-            print(" No storage keys returned from ARM.")
+            print("No storage keys returned from ARM")
             return None
         account_key = keys[0]["value"]
         conn_str = (
@@ -68,10 +59,10 @@ def build_connection_string_from_azure() -> Optional[str]:
             f"AccountKey={account_key};"
             "EndpointSuffix=core.windows.net"
         )
-        print(" Derived connection string automatically from ARM.")
+        print("Derived connection string automatically from ARM")
         return conn_str
     except Exception as e:
-        print(f" Failed to derive connection string via ARM: {e}")
+        print(f"Failed to derive connection string via ARM: {e}")
         return None
     
 def upload_file(blob_service_client, container_name, local_path, blob_path):
@@ -90,6 +81,7 @@ def upload_file(blob_service_client, container_name, local_path, blob_path):
     except Exception as e:
         print(f" Failed to upload {blob_path}: {e}")
         return False
+    
 def main():
     print("Azure Data Lake Uploader")
 
