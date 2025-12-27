@@ -26,7 +26,7 @@ def generate_customers(n=NUM_CUSTOMERS):
             'dni': fake.random_number(digits=8,fix_len=True),
             'date_of_birth': fake.date_of_birth(minimum_age=18, maximum_age=70),
             'registration_date': reg_date,
-            'city': fake.city(),
+            'city': 'Lima',
             'district': random.choice([
                 'San Isidro', 'Miraflores', 'Surco',
                 'La Molina', 'San Borja', 'Jesús María'
@@ -124,12 +124,12 @@ def generate_transactions(customers_df, merchants_df, n=NUM_TRANSACTIONS):
 
             if is_fraud:
                 status = random.choices(
-                    ['approved', 'declined', 'under_review'],
+                    ['completed', 'failed', 'cancelled'],
                     weights=[0.30, 0.50, 0.20]
                 )[0]
             else:
                 status = random.choices(
-                    ['approved', 'declined', 'pending'],
+                    ['completed', 'failed', 'pending'],
                     weights=[0.94, 0.04, 0.02]
                 )[0]
 
@@ -138,7 +138,6 @@ def generate_transactions(customers_df, merchants_df, n=NUM_TRANSACTIONS):
                 'customer_id': customer_id,
                 'merchant_id': random.choice(merchant_ids),
                 'transaction_date': trans_date,
-                'transaction_time': trans_date.strftime('%H:%M:%S'),
                 'amount': round(base_amount, 2),
                 'currency': random.choices(['PEN', 'USD'], weights=[0.85, 0.15])[0],
                 'transaction_type': trans_type,
