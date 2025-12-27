@@ -1,4 +1,4 @@
-# Credicorp Transaction Platform
+# Financial Data Platform
 
 A data pipeline that processes financial transactions using PySpark and Delta Lake on Azure.
 
