@@ -93,23 +93,23 @@ def main():
     print("Authentication successful")
 
     print("\n Uploading customers")
-    customers_file = DATA_DIR / "customers.csv"
+    customers_file = DATA_DIR / "customers.json"
     if customers_file.exists():
         upload_file(
             blob_service_client,
             "bronze",
             customers_file,
-            "raw/customers/customers.csv"
+            "raw/customers/customers.json"
         )
 
     print("\n Uploading merchants")
-    merchants_file = DATA_DIR / "merchants.csv"
+    merchants_file = DATA_DIR / "merchants.json"
     if merchants_file.exists():
         upload_file(
             blob_service_client,
             "bronze",
             merchants_file,
-            "raw/merchants/merchants.csv"
+            "raw/merchants/merchants.json"
         )
 
     print(" Uploading transactions")
@@ -124,6 +124,8 @@ def main():
                 f"raw/transactions/{trans_file.name}"
             )
     print("Upload complete")
+
+
 
 if __name__ == "__main__":
     main()
