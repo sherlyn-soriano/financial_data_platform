@@ -12,7 +12,7 @@ else:
     libs_path = Path(__file__).parent.parent.parent / "libs"
     sys.path.insert(0, str(libs_path))
 
-from data_quality import run_bronze_quality_checks
+from data_quality import add_quality_flags_transactions, generate_quality_summary, print_quality_summary
 
 spark: SparkSession
 
@@ -58,14 +58,12 @@ bronze_transactions = (transactions_df
     .withColumn("source_file", input_file_name())
     .withColumn("data_source", lit("azure_csv")))
 
-bronze_transactions.show(5, truncate=False)
+bronze_transactions_with_quality = add_quality_flags_transactions(bronze_transactions)
 
-expected_schema = {field.name: field.dataType.simpleString() for field in transaction_schema.fields}
-quality_report = run_bronze_quality_checks(bronze_transactions, ['transaction_id'], expected_schema)
-print(quality_report.get_summary())
-
-(bronze_transactions.write
-    .format("delta")
-    .mode("overwrite")
-    .option("mergeSchema", "true")
+quality_summary = generate_quality_summary(bronze_transactions_with_quality)
+print_quality_summary(quality_summary)
+(bronze_transactions_with_quality.write
+    .format('delta')
+    .mode('overwrite')
+    .option('mergeSchema', 'true')
     .save(target_path))

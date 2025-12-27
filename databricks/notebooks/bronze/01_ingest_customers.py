@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import current_timestamp, input_file_name, lit
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, DateType, BooleanType
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, DateType, BooleanType
 import os
 import sys
 from pathlib import Path
@@ -12,7 +12,7 @@ else:
     libs_path = Path(__file__).parent.parent.parent / "libs"
     sys.path.insert(0, str(libs_path))
 
-from data_quality import run_bronze_quality_checks
+from data_quality import add_quality_flags_customers, generate_quality_summary, print_quality_summary
 
 spark: SparkSession
 
@@ -32,7 +32,7 @@ customer_schema = StructType([
     StructField("district", StringType(), True),
     StructField("country", StringType(), True),
     StructField("customer_segment", StringType(), True),
-    StructField("risk_score", IntegerType(), True),
+    StructField("risk_score", DoubleType(), True),
     StructField("account_balance", DoubleType(), True),
     StructField("credit_limit", DoubleType(), True),
     StructField("is_active", BooleanType(), False),
@@ -40,12 +40,11 @@ customer_schema = StructType([
     StructField("updated_at", DateType(), True)
 ])
 
-source_path = f"abfss://bronze@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/raw/customers/customers.csv"
+source_path = f"abfss://bronze@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/raw/customers/customers.json"
 target_path = f"abfss://bronze@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/bronze/customers"
 
 customers_df = (spark.read
-    .format("csv")
-    .option("header", "true")
+    .format("json")
     .option("mode", "PERMISSIVE")
     .option("columnNameOfCorruptRecord", "_corrupt_record")
     .schema(customer_schema)
@@ -54,17 +53,15 @@ customers_df = (spark.read
 bronze_customers = (customers_df
     .withColumn("ingestion_timestamp", current_timestamp())
     .withColumn("source_file", input_file_name())
-    .withColumn("data_source", lit("azure_csv")))
+    .withColumn("data_source", lit("azure_json")))
 
-bronze_customers.show(5, truncate=False)
+bronze_customers_with_quality = add_quality_flags_customers(bronze_customers)
 
-expected_schema = {field.name: field.dataType.simpleString() for field in customer_schema.fields}
-quality_report = run_bronze_quality_checks(bronze_customers, ['customer_id', 'dni', 'is_active'], expected_schema)
-print(quality_report.get_summary())
+quality_summary = generate_quality_summary(bronze_customers_with_quality)
+print_quality_summary(quality_summary)
 
-(bronze_customers.write
-    .format("delta")
-    .mode("overwrite")
-    .option("mergeSchema", "true")
+(bronze_customers_with_quality.write
+    .format('delta')
+    .mode('overwrite')
+    .option('mergeSchema', 'true')
     .save(target_path))
-

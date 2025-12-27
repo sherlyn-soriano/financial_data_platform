@@ -1,162 +1,304 @@
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from typing import Dict, List, Any
+from pyspark.sql.types import ArrayType, StringType, StructType, StructField
+from typing import List, Dict
 from datetime import datetime
 
-# SECTION 1: BASIC CHECKS
-def check_null_counts(df: DataFrame, critical_columns: List[str]) -> Dict[str, int]:
-    null_counts = {}
-
-    for col in critical_columns:
+def check_null_counts(df: DataFrame, columns: List[str]) -> int:
+    total = 0
+    for col in columns:
         if col in df.columns:
-            null_count = df.filter(F.col(col).isNull()).count()
-            null_counts[col] = null_count
-        else:
-            null_counts[col] = -1 
+            total += df.filter(F.col(col).isNull()).count()
+    return total
 
-    return null_counts
+def check_duplicates(df: DataFrame, key_columns: List[str]) -> int:
+    total = df.count()
+    distinct = df.select(key_columns).distinct().count()
+    return total - distinct
 
-def check_duplicate_keys(df: DataFrame, key_columns: List[str]) -> int:
-    total_count = df.count()
-    distinct_count = df.select(key_columns).distinct().count()
+def check_value_range(df: DataFrame, column: str, min_val: float, max_val: float) -> int:
+    return df.filter((F.col(column) < min_val) | (F.col(column) > max_val)).count()
 
-    duplicates = total_count - distinct_count
-    return duplicates
+def check_allowed_values(df: DataFrame, column: str, allowed: List) -> int:
+    return df.filter(~F.col(column).isin(allowed) & F.col(column).isNotNull()).count()
 
-# SECTION 2: BUSINESS LOGIC CHECKS
+def calculate_completeness(df: DataFrame, columns: List[str]) -> float:
+    total_cells = df.count() * len(columns)
+    if total_cells == 0:
+        return 100.0
+    null_cells = 0
+    for col in columns:
+        if col in df.columns:
+            null_cells += df.filter(F.col(col).isNull()).count()
+    return ((total_cells - null_cells) / total_cells) * 100
 
-def check_value_ranges(df: DataFrame, column: str, min_val: float, max_val: float) -> int:
-    out_of_range = df.filter(
-        (F.col(column) < min_val) | (F.col(column) > max_val)
-    ).count()
-
-    return out_of_range
-
-def check_allowed_values(df: DataFrame, column: str, allowed_values: List) -> Dict:
-
-    actual_values = [row[column] for row in df.select(column).distinct().collect()] 
-
-    invalid_values = [v for v in actual_values if v not in allowed_values and v is not None]
-
-    invalid_counts = {}
-    for val in invalid_values:
-        count = df.filter(F.col(column) == val).count()
-        invalid_counts[val] = count
-
-    return invalid_counts
-
-# SECTION 3: SCHEMA CHECKS 
-
-def check_referential_integrity(df_child: DataFrame, df_parent: DataFrame, child_key: str, parent_key: str) -> int:
-    orphaned = df_child.join(
-        df_parent,
-        df_child[child_key]==df_parent[parent_key],
-        "left_anti"
-    ).count()
-
-    return orphaned
-
-def detect_schema_drift( current_df: DataFrame, expected_schema: Dict[str, str]) -> Dict[str, List[str]]:
-    current_schema = {field.name: field.dataType.simpleString() for field in current_df.schema.fields}
-    missing_columns = [col for col in expected_schema if col not in current_schema]
-    extra_columns = [col for col in current_schema if col not in expected_schema]
-
-    type_mismatches = []
-    for col, expected_type in expected_schema.items():
-        if col in current_schema and current_schema[col] != expected_type:
-            type_mismatches.append(f"{col}: expected {expected_type}, got {current_schema[col]}")
-    return {
-        'missing_columns': missing_columns,
-        'extra_columns': extra_columns,
-        'type_mismatches': type_mismatches
-    }
-
-# SECTION 4: ORCHESTRATION 
-
-class DataQualityReport:
-
+class QualityReport:
     def __init__(self):
         self.checks = {}
-        self.passed = True 
+        self.passed = True
         self.timestamp = datetime.now()
 
-    def add_check(self, check_name: str, result: Any, passed: bool):
-        self.checks[check_name]= {
-            'result': result,
-            'passed': passed
-        }
-        if not passed: 
+    def add_check(self, name: str, result: str, passed: bool):
+        self.checks[name] = {'result': result, 'passed': passed}
+        if not passed:
             self.passed = False
 
-    def get_summary(self) -> str:
-        summary = f"Data Quality Report - {self.timestamp}\n"
-        summary += f"Overall Status: {'PASSED' if self.passed else 'FAILED'}\n\n"
+    def summary(self) -> str:
+        lines = [f"Quality Report - {self.timestamp}", f"Status: {'PASSED' if self.passed else 'FAILED'}\n"]
+        for name, data in self.checks.items():
+            status = 'OK' if data['passed'] else 'FAIL'
+            lines.append(f"[{status}] {name}: {data['result']}")
+        return '\n'.join(lines)
 
-        for check_name, check_data in self.checks.items():
-            status = 'ok' if check_data['passed'] else 'not ok'
-            summary += f"{status} {check_name}: {check_data['result']}\n"
-
-        return summary
-    
-def run_bronze_quality_checks(df: DataFrame, key_columns: List[str], expected_schema: Dict[str, str]) -> DataQualityReport:
-    report = DataQualityReport()
+def validate_bronze(df: DataFrame, key_columns: List[str]) -> QualityReport:
+    report = QualityReport()
 
     row_count = df.count()
-    report.add_check("Row Count", f"{row_count} rows", True)
+    report.add_check("Row Count", f"{row_count}", True)
 
-    null_counts = check_null_counts(df, key_columns)
-    total_nulls = sum(null_counts.values())
-    report.add_check("Null Tracking", f"{total_nulls} nulls in key columns", True)
+    nulls = check_null_counts(df, key_columns)
+    report.add_check("Null Keys", f"{nulls}", nulls == 0)
 
-    duplicates = check_duplicate_keys(df, key_columns)
-    report.add_check("Duplicate Tracking", f"{duplicates} duplicates", True)
-
-    drift = detect_schema_drift(df, expected_schema)
-    has_drift = (len(drift['missing_columns']) > 0 or
-                 len(drift['extra_columns']) > 0 or
-                 len(drift['type_mismatches']) > 0)
-    report.add_check("Schema Drift", f"{drift}", not has_drift)
+    dupes = check_duplicates(df, key_columns)
+    report.add_check("Duplicates", f"{dupes}", dupes == 0)
 
     return report
 
-def run_silver_transaction_quality_checks(df: DataFrame) -> DataQualityReport:
-    report = DataQualityReport()
+def validate_silver_transactions(df: DataFrame) -> QualityReport:
+    report = QualityReport()
 
-    null_counts = check_null_counts(df,['transaction_id','amount', 'customer_id', 'merchant_id'])
-    total_nulls = sum(null_counts.values())
-    report.add_check("Critical Nulls Check",
-                     f"{total_nulls} nulls found",
-                     total_nulls == 0)
+    nulls = check_null_counts(df, ['transaction_id', 'amount', 'customer_id', 'merchant_id'])
+    report.add_check("Critical Nulls", f"{nulls}", nulls == 0)
 
-    duplicates = check_duplicate_keys(df, ['transaction_id'])
-    report.add_check("Duplicate Keys Check",
-                     f"{duplicates} duplicates",
-                     duplicates == 0)
+    dupes = check_duplicates(df, ['transaction_id'])
+    report.add_check("Duplicates", f"{dupes}", dupes == 0)
 
-    if 'amount' in df.columns:
-        invalid_amounts = check_value_ranges(df, 'amount', 0.01, 10000000)
-        report.add_check("Amount Range Check", f"{invalid_amounts} out of range", invalid_amounts == 0)
+    invalid_amounts = check_value_range(df, 'amount', 0.01, 10000000)
+    report.add_check("Amount Range", f"{invalid_amounts} invalid", invalid_amounts == 0)
 
-    if 'status' in df.columns:
-        invalid_statuses = check_allowed_values(
-            df,
-            'status',
-            ['pending', 'completed', 'failed', 'cancelled']
-        )
-        report.add_check(
-            "Status Values Check",
-            f"Invalid: {invalid_statuses}" if invalid_statuses else "All valid",
-            len(invalid_statuses) == 0
-        )
+    invalid_status = check_allowed_values(df, 'status', ['pending', 'completed', 'failed', 'cancelled'])
+    report.add_check("Status Values", f"{invalid_status} invalid", invalid_status == 0)
 
-    completeness = calculate_completeness_score(
-        df,
-        ['transaction_id', 'amount', 'customer_id', 'transaction_date']
-    )
-    report.add_check(
-        "Completeness Score",
-        f"{completeness:.2f}%",
-        completeness >= 95.0
-    )
+    completeness = calculate_completeness(df, ['transaction_id', 'amount', 'customer_id', 'transaction_date'])
+    report.add_check("Completeness", f"{completeness:.1f}%", completeness >= 95.0)
 
     return report
+
+def validate_silver_customers(df: DataFrame) -> QualityReport:
+    report = QualityReport()
+
+    nulls = check_null_counts(df, ['customer_id', 'dni'])
+    report.add_check("Critical Nulls", f"{nulls}", nulls == 0)
+
+    dupes = check_duplicates(df, ['customer_id'])
+    report.add_check("Duplicates", f"{dupes}", dupes == 0)
+
+    invalid_segment = check_allowed_values(df, 'customer_segment', ['VIP', 'Premium', 'Standard', 'Basic'])
+    report.add_check("Segment Values", f"{invalid_segment} invalid", invalid_segment == 0)
+
+    invalid_risk = check_value_range(df, 'risk_score', 0.0, 1.0)
+    report.add_check("Risk Score Range", f"{invalid_risk} invalid", invalid_risk == 0)
+
+    return report
+
+def validate_silver_merchants(df: DataFrame) -> QualityReport:
+    report = QualityReport()
+
+    nulls = check_null_counts(df, ['merchant_id'])
+    report.add_check("Critical Nulls", f"{nulls}", nulls == 0)
+
+    dupes = check_duplicates(df, ['merchant_id'])
+    report.add_check("Duplicates", f"{dupes}", dupes == 0)
+
+    return report
+
+def add_quality_flags_bronze(df: DataFrame, key_columns: List[str]) -> DataFrame:
+    quality_issues = F.array().cast(ArrayType(StringType()))
+
+    for col in key_columns:
+        if col in df.columns:
+            quality_issues = F.when(
+                F.col(col).isNull(),
+                F.array_union(quality_issues, F.array(F.lit(f'null_{col}')))
+            ).otherwise(quality_issues)
+
+    df_with_flags = df.withColumn('quality_issues', quality_issues)
+    df_with_flags = df_with_flags.withColumn(
+        'is_valid',
+        F.size(F.col('quality_issues')) == 0
+    )
+    df_with_flags = df_with_flags.withColumn('quality_check_timestamp', F.current_timestamp())
+
+    return df_with_flags
+
+def add_quality_flags_customers(df: DataFrame) -> DataFrame:
+    quality_issues = F.array().cast(ArrayType(StringType()))
+    for col in ['customer_id', 'dni', 'is_active']:
+        if col in df.columns:
+            quality_issues = F.when(
+                F.col(col).isNull(),
+                F.array_union(quality_issues, F.array(F.lit(f'null_{col}')))
+            ).otherwise(quality_issues)
+
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    quality_issues = F.when(
+        (F.col('email').isNotNull()) & (~F.col('email').rlike(email_pattern)),
+        F.array_union(quality_issues, F.array(F.lit('invalid_email_format')))
+    ).otherwise(quality_issues)
+
+    quality_issues = F.when(
+        (F.col('email').isNull()) | (F.col('email') == ''),
+        F.array_union(quality_issues, F.array(F.lit('missing_email')))
+    ).otherwise(quality_issues)
+
+    valid_segments = ['VIP', 'Premium', 'Standard', 'Basic']
+    quality_issues = F.when(
+        (F.col('customer_segment').isNotNull()) & (~F.col('customer_segment').isin(valid_segments)),
+        F.array_union(quality_issues, F.array(F.lit('invalid_customer_segment')))
+    ).otherwise(quality_issues)
+
+    quality_issues = F.when(
+        (F.col('risk_score').isNotNull()) & ((F.col('risk_score') < 0.0) | (F.col('risk_score') > 1.0)),
+        F.array_union(quality_issues, F.array(F.lit('invalid_risk_score_range')))
+    ).otherwise(quality_issues)
+
+    known_typos = ['Limasse']
+    quality_issues = F.when(
+        F.col('city').isin(known_typos),
+        F.array_union(quality_issues, F.array(F.lit('city_typo')))
+    ).otherwise(quality_issues)
+
+    df_with_flags = df.withColumn('quality_issues', quality_issues)
+    df_with_flags = df_with_flags.withColumn(
+        'is_valid',
+        F.size(F.col('quality_issues')) == 0
+    )
+    df_with_flags = df_with_flags.withColumn('quality_check_timestamp', F.current_timestamp())
+
+    return df_with_flags
+
+def add_quality_flags_merchants(df: DataFrame) -> DataFrame:
+    quality_issues = F.array().cast(ArrayType(StringType()))
+    quality_issues = F.when(
+        F.col('merchant_id').isNull(),
+        F.array_union(quality_issues, F.array(F.lit('null_merchant_id')))
+    ).otherwise(quality_issues)
+
+    quality_issues = F.when(
+        (F.col('category').isNull()) | (F.col('category') == ''),
+        F.array_union(quality_issues, F.array(F.lit('missing_category')))
+    ).otherwise(quality_issues)
+
+    quality_issues = F.when(
+        (F.col('mcc_code').isNotNull()) & ((F.col('mcc_code') < 1000) | (F.col('mcc_code') > 9999)),
+        F.array_union(quality_issues, F.array(F.lit('invalid_mcc_code')))
+    ).otherwise(quality_issues)
+
+    known_typos = ['Peruss']
+    quality_issues = F.when(
+        F.col('country').isin(known_typos),
+        F.array_union(quality_issues, F.array(F.lit('country_typo')))
+    ).otherwise(quality_issues)
+
+    quality_issues = F.when(
+        (F.col('merchant_name').isNotNull()) &
+        (F.col('merchant_name').contains('SA')) &
+        (~F.col('merchant_name').contains('S.A.')),
+        F.array_union(quality_issues, F.array(F.lit('merchant_name_format_issue')))
+    ).otherwise(quality_issues)
+
+    df_with_flags = df.withColumn('quality_issues', quality_issues)
+    df_with_flags = df_with_flags.withColumn(
+        'is_valid',
+        F.size(F.col('quality_issues')) == 0
+    )
+    df_with_flags = df_with_flags.withColumn('quality_check_timestamp', F.current_timestamp())
+
+    return df_with_flags
+
+def add_quality_flags_transactions(df: DataFrame) -> DataFrame:
+    quality_issues = F.array().cast(ArrayType(StringType()))
+    for col in ['transaction_id', 'customer_id', 'amount']:
+        if col in df.columns:
+            quality_issues = F.when(
+                F.col(col).isNull(),
+                F.array_union(quality_issues, F.array(F.lit(f'null_{col}')))
+            ).otherwise(quality_issues)
+
+    quality_issues = F.when(
+        F.col('merchant_id').isNull(),
+        F.array_union(quality_issues, F.array(F.lit('missing_merchant_id')))
+    ).otherwise(quality_issues)
+
+    quality_issues = F.when(
+        (F.col('amount').isNotNull()) & (F.col('amount') < 0),
+        F.array_union(quality_issues, F.array(F.lit('negative_amount')))
+    ).otherwise(quality_issues)
+
+    valid_statuses = ['pending', 'completed', 'failed', 'cancelled']
+    quality_issues = F.when(
+        (F.col('status').isNotNull()) & (~F.col('status').isin(valid_statuses)),
+        F.array_union(quality_issues, F.array(F.lit('invalid_status')))
+    ).otherwise(quality_issues)
+
+    valid_currencies = ['PEN', 'USD', 'EUR']
+    quality_issues = F.when(
+        (F.col('currency').isNotNull()) & (~F.col('currency').isin(valid_currencies)),
+        F.array_union(quality_issues, F.array(F.lit('invalid_currency')))
+    ).otherwise(quality_issues)
+
+    valid_channels = ['online', 'mobile', 'atm', 'branch', 'pos', 'agent']
+    quality_issues = F.when(
+        (F.col('channel').isNotNull()) & (~F.col('channel').isin(valid_channels)),
+        F.array_union(quality_issues, F.array(F.lit('invalid_channel')))
+    ).otherwise(quality_issues)
+
+    df_with_flags = df.withColumn('quality_issues', quality_issues)
+    df_with_flags = df_with_flags.withColumn(
+        'is_valid',
+        F.size(F.col('quality_issues')) == 0
+    )
+    df_with_flags = df_with_flags.withColumn('quality_check_timestamp', F.current_timestamp())
+
+    return df_with_flags
+
+def generate_quality_summary(df: DataFrame) -> Dict:
+    total_records = df.count()
+    valid_records = df.filter(F.col('is_valid') == True).count()
+    invalid_records = total_records - valid_records
+
+    issues_exploded = df.filter(F.size(F.col('quality_issues')) > 0).select(
+        F.explode('quality_issues').alias('issue_type')
+    )
+
+    issue_counts = {}
+    if issues_exploded.count() > 0:
+        issue_counts = {
+            row['issue_type']: row['count']
+            for row in issues_exploded.groupBy('issue_type').count().collect()
+        }
+
+    return {
+        'total_records': total_records,
+        'valid_records': valid_records,
+        'invalid_records': invalid_records,
+        'data_quality_score': (valid_records / total_records * 100) if total_records > 0 else 0.0,
+        'issue_breakdown': issue_counts,
+        'timestamp': datetime.now().isoformat()
+    }
+
+def print_quality_summary(summary: Dict):
+    print('\n' + '='*60)
+    print('BRONZE LAYER QUALITY SUMMARY')
+    print('='*60)
+    print(f"Total Records: {summary['total_records']}")
+    print(f"Valid Records: {summary['valid_records']}")
+    print(f"Invalid Records: {summary['invalid_records']}")
+    print(f"Data Quality Score: {summary['data_quality_score']:.2f}%")
+
+    if summary['issue_breakdown']:
+        print('\nIssue Breakdown:')
+        for issue, count in sorted(summary['issue_breakdown'].items(), key=lambda x: x[1], reverse=True):
+            print(f"  - {issue}: {count}")
+
+    print('='*60 + '\n')

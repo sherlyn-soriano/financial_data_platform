@@ -13,7 +13,7 @@ fake = Faker(['es_PE'])
 random.seed(42)
 np.random.seed(42)
 
-def generate_customers(n=NUM_CUSTOMERS):
+def generate_customers(n: int=NUM_CUSTOMERS) -> pd.DataFrame:
     customers = []
     for i in range(n):
         reg_date = fake.date_between(start_date='-5y', end_date='-1y')
@@ -40,15 +40,14 @@ def generate_customers(n=NUM_CUSTOMERS):
             'account_balance': round(random.lognormvariate(8,2), 2),
             'credit_limit': round(random.lognormvariate(9, 1.5), 2),
             'is_active': random.choices([1,0], weights=[0.95, 0.05])[0],
-            'created_at': reg_date,
-            'updated_at': fake.date_time_between(start_date=reg_date, end_date='now')
+            'created_at': reg_date
             })
     return pd.DataFrame(customers)
 
-def generate_merchants(n=NUM_MERCHANTS):
+def generate_merchants(n: int=NUM_MERCHANTS) -> pd.DataFrame:
     categories = [
         'Retail','Restaurants & Fast Food','E-commerce & Online Services',
-        'Transportation','Telecom','Utilities','Health & Pharmacies', 
+        'Transportation','Utilities','Health & Pharmacies', 
         'Education','Entertainment','Financial Services']
    
     merchants = []
@@ -67,7 +66,7 @@ def generate_merchants(n=NUM_MERCHANTS):
         
     return pd.DataFrame(merchants)
 
-def generate_transactions(customers_df, merchants_df, n=NUM_TRANSACTIONS):
+def generate_transactions(customers_df: pd.DataFrame, merchants_df: pd.DataFrame, n: int=NUM_TRANSACTIONS) -> pd.DataFrame:
 
     customer_ids = customers_df['customer_id'].tolist()
     merchant_ids = merchants_df['merchant_id'].tolist()
@@ -118,8 +117,8 @@ def generate_transactions(customers_df, merchants_df, n=NUM_TRANSACTIONS):
                 fraud_reason = 'high_risk_customer'
 
             channel = random.choices(
-                ['online', 'mobile', 'atm', 'branch', 'pos'],
-                weights=[0.30, 0.25, 0.15, 0.10, 0.20]
+                ['online', 'mobile', 'atm', 'branch', 'pos', 'agent'],
+                weights=[0.25, 0.30, 0.10, 0.08, 0.20, 0.07]
             )[0]
 
             if is_fraud:
@@ -157,17 +156,12 @@ def generate_transactions(customers_df, merchants_df, n=NUM_TRANSACTIONS):
             }
 
             batch_transactions.append(transaction)
-        
+
         transactions.extend(batch_transactions)
 
-        if (batch_num + batch_size) % 100000 == 0:
-            print(f"Generated {batch_num + batch_size:,} transactions")
-    
     return pd.DataFrame(transactions)
 
 def main():
-    print("Transaction Data Generator")
-
     OUTPUT_DIR.mkdir(exist_ok=True)
     (OUTPUT_DIR / "transactions").mkdir(exist_ok=True)
 
@@ -175,32 +169,14 @@ def main():
     merchants = generate_merchants()
     transactions = generate_transactions(customers, merchants)
 
-    customers.to_csv(OUTPUT_DIR / 'customers.csv', index=False)
-    print(f"Saved customers.csv ({len(customers):,} rows)")
+    customers.to_json(OUTPUT_DIR / 'customers.json', orient='records', lines=True)
+    merchants.to_json(OUTPUT_DIR / 'merchants.json', orient='records', lines=True)
 
-    merchants.to_csv(OUTPUT_DIR / 'merchants.csv', index=False)
-    print(f"Saved merchants.csv ({len(merchants):,} rows)")
+    transactions['year_month'] = pd.to_datetime(transactions['transaction_date']).dt.to_period('M')
 
-    transactions['year_month'] = pd.to_datetime(
-        transactions['transaction_date']
-    ).dt.to_period('M')
-    
     for period, group in transactions.groupby('year_month'):
         filename = OUTPUT_DIR / 'transactions' / f'transactions_{period}.csv'
         group.drop('year_month', axis=1).to_csv(filename, index=False)
-        print(f"Saved {filename.name} ({len(group):,} rows)")
-
-    print("DATA GENERATION SUMMARY")
-    print(f"Customers: {len(customers):,}")
-    print(f"Merchants: {len(merchants):,}")
-    print(f"Transactions: {len(transactions):,}")
-    print(f"Fraud Count: {transactions['is_fraud'].sum():,}")
-    print(f"Total Amount: S/{transactions['amount'].sum():,.2f}")
-    print(f"Date Range: {transactions['transaction_date'].min()} to {transactions['transaction_date'].max()}")
-    print("\nTransactions Status:")
-    print(transactions['status'].value_counts())
-    print("\nTransactions Types:")
-    print(transactions['transaction_type'].value_counts())
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ else:
     libs_path = Path(__file__).parent.parent.parent / "libs"
     sys.path.insert(0, str(libs_path))
 
-from data_quality import run_bronze_quality_checks
+from data_quality import add_quality_flags_merchants, generate_quality_summary, print_quality_summary
 
 spark: SparkSession
 
@@ -30,12 +30,11 @@ merchant_schema = StructType([
     StructField("registration_date", DateType(), True)
 ])
 
-source_path = f"abfss://bronze@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/raw/merchants/merchants.csv"
+source_path = f"abfss://bronze@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/raw/merchants/merchants.json"
 target_path = f"abfss://bronze@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/bronze/merchants"
 
 merchants_df = (spark.read
-    .format("csv")
-    .option("header", "true")
+    .format("json")
     .option("mode", "PERMISSIVE")
     .option("columnNameOfCorruptRecord", "_corrupt_record")
     .schema(merchant_schema)
@@ -44,16 +43,14 @@ merchants_df = (spark.read
 bronze_merchants = (merchants_df
     .withColumn("ingestion_timestamp", current_timestamp())
     .withColumn("source_file", input_file_name())
-    .withColumn("data_source", lit("azure_csv")))
+    .withColumn("data_source", lit("azure_json")))
 
-bronze_merchants.show(5, truncate=False)
+bronze_merchants_with_quality = add_quality_flags_merchants(bronze_merchants)
 
-expected_schema = {field.name: field.dataType.simpleString() for field in merchant_schema.fields}
-quality_report = run_bronze_quality_checks(bronze_merchants, ['merchant_id'], expected_schema)
-print(quality_report.get_summary())
-
-(bronze_merchants.write
-    .format("delta")
-    .mode("overwrite")
-    .option("mergeSchema", "true")
+quality_summary = generate_quality_summary(bronze_merchants_with_quality)
+print_quality_summary(quality_summary)
+(bronze_merchants_with_quality.write
+    .format('delta')
+    .mode('overwrite')
+    .option('mergeSchema', 'true')
     .save(target_path))
