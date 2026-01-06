@@ -26,7 +26,7 @@ GOLD: Aggregate Metrics (customer/transaction/merchant analytics)
 
 - Bronze Layer: Raw data ingestion with validation (3 notebooks)
 - Silver Layer: Data transformation and cleansing (3 notebooks)
-- Gold Layer: Analytics aggregations (4 notebooks)
+- Gold Layer: Analytics aggregations (3 notebooks)
 - Data Quality Framework: Rule-based validation engine
 - Airflow Orchestration: DAG with dependencies, retries, scheduling
 - Infrastructure: Automated Azure provisioning with Pulumi
@@ -41,7 +41,7 @@ databricks/
 ├── notebooks/
 │   ├── bronze/        Ingestion (3)
 │   ├── silver/        Transform (3)
-│   └── gold/          Analytics (4)
+│   └── gold/          Analytics (3)
 infrastructure/        Pulumi Azure IaC
 scripts/               Data generation
 tests/                 Unit tests

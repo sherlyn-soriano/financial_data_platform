@@ -114,26 +114,15 @@ with DAG(
         },
     )
 
-    gold_fraud_analysis = DatabricksSubmitRunOperator(
-        task_id='gold_fraud_analysis',
-        databricks_conn_id=databricks_conn_id,
-        notebook_task={
-            'notebook_path': '/Workspace/Repos/databricks/notebooks/gold/03_fraud_analysis',
-            **gold_notebook_config
-        },
-    )
-
     gold_merchant_performance = DatabricksSubmitRunOperator(
         task_id='gold_merchant_performance',
         databricks_conn_id=databricks_conn_id,
         notebook_task={
-            'notebook_path': '/Workspace/Repos/databricks/notebooks/gold/04_merchant_performance',
+            'notebook_path': '/Workspace/Repos/databricks/notebooks/gold/03_merchant_performance',
             **gold_notebook_config
         },
     )
 
     bronze_customers >> silver_customers >> gold_customer_metrics
     bronze_merchants >> silver_merchants >> gold_merchant_performance
-    bronze_transactions >> silver_transactions >> [gold_transaction_metrics, gold_fraud_analysis]
-    [silver_customers, silver_transactions] >> gold_fraud_analysis
-    [silver_merchants, silver_transactions] >> gold_merchant_performance
+    bronze_transactions >> silver_transactions >> gold_transaction_metrics
