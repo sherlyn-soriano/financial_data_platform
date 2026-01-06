@@ -57,7 +57,7 @@ def generate_customers(n: int=NUM_CUSTOMERS) -> pd.DataFrame:
             'registration_date': reg_date,
             'city': 'Lima',
             'district': random.choice([
-                'San Isidro', 'San Borja', 'Jesús María' ]),
+                'San Isidro', 'San Borja', 'Miraflores' ]),
             'country': 'Peru',
             'customer_segment': random.choices(
                 ['VIP', 'Premium', 'Standard', 'Basic'],

@@ -2,15 +2,15 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import current_timestamp, input_file_name, lit
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, DateType, BooleanType
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
 if not os.path.exists('/Workspace'):
     libs_path = Path(__file__).parent.parent.parent / "libs"
-    import sys
     sys.path.insert(0, str(libs_path))
 
-from bronze_check import add_quality_flags_customers, generate_quality_summary, print_quality_summary
+from bronze_check import add_quality_flags_customers
 
 spark: SparkSession
 
@@ -53,9 +53,6 @@ bronze_customers = (customers_df
     .withColumn("data_source", lit("azure_json")))
 
 bronze_customers_with_quality = add_quality_flags_customers(bronze_customers)
-
-quality_summary = generate_quality_summary(bronze_customers_with_quality)
-print_quality_summary(quality_summary)
 
 (bronze_customers_with_quality.write
     .format('delta')

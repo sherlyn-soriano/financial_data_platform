@@ -39,7 +39,6 @@ storage_account = create_data_lake(
     }
 )
 
-
 key_vault = create_key_vault(
     name=get_resource_name("kv"),
     resource_group_name=resource_group.name,
@@ -82,24 +81,3 @@ pulumi.export("key_vault_uri", key_vault.properties.vault_uri)
 pulumi.export("databricks_workspace_url", databricks_workspace.workspace_url)
 pulumi.export("data_factory_name", data_factory.name)
 pulumi.export("data_factory_id",data_factory.id)
-
-pulumi.export("deployment_summary", pulumi.Output.all(
-    resource_group.name,
-    storage_account.name,
-    key_vault.name,
-    databricks_workspace.workspace_url,
-    data_factory.name
-).apply(lambda args: f"""
-
-Resource Group:    {args[0]}
-Storage Account:   {args[1]}
-Key Vault:         {args[2]}
-Databricks:        {args[3]}
-Data Factory:      {args[4]}
-
-"""))
-
-#Next Steps:
-#1. Run: pulumi stack output storage_account_key
-#2. Upload data: python scripts/upload_to_datalake.py
-#3. Deploy notebooks: cd databricks && ./deploy.sh

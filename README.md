@@ -1,62 +1,81 @@
 # Financial Data Pipeline
-A data pipeline that processes financial transactions using PySpark and Delta Lake on Azure.
 
-## What It Does
+End-to-end data pipeline processing 1M+ financial transactions using **Medallion Architecture** (Bronze → Silver → Gold) with data quality validation.
 
-- Reads transaction data from customers and merchants
-- Cleans and validates the data
-- Creates analytics tables
+## Skills Demonstrated
 
-## Pipeline Flow
+**Data Engineering**: PySpark • Delta Lake • ETL • Data Quality Validation • Medallion Architecture
+**Orchestration**: Apache Airflow • Docker • DAG Design
+**Cloud**: Azure Databricks • Azure Data Lake Gen2 • Azure Key Vault
+**Infrastructure**: Pulumi (IaC)
+**Development**: Python 3.12 • pytest • Git
 
-**Bronze Layer** → Raw data ingestion
-**Silver Layer** → Clean and validate
-**Gold Layer** → Analytics tables
+## Architecture
+
+```
+Raw Data (JSON/CSV)
+    ↓
+BRONZE: Ingest + Validate (email, phone, DNI formats)
+    ↓
+SILVER: Transform + Clean (business rules, standardization)
+    ↓
+GOLD: Aggregate Metrics (customer/transaction/merchant analytics)
+```
+
+## What I Built
+
+- Bronze Layer: Raw data ingestion with validation (3 notebooks)
+- Silver Layer: Data transformation and cleansing (3 notebooks)
+- Gold Layer: Analytics aggregations (4 notebooks)
+- Data Quality Framework: Rule-based validation engine
+- Airflow Orchestration: DAG with dependencies, retries, scheduling
+- Infrastructure: Automated Azure provisioning with Pulumi
+- Testing: Unit tests for validation logic
 
 ## Project Structure
 
 ```
-databricks/notebooks/
-├── bronze/   # 3 notebooks - ingest customers, merchants, transactions
-├── silver/   # 3 notebooks - clean data
-└── gold/     # 4 notebooks - analytics
-
-databricks/libs/
-└── data_quality.py  # validation functions
-
-scripts/
-├── generate_data.py  # creates test data
-├── corrupt_data.py   # adds errors for testing
-└── upload_to_datalake.py
+airflow/dags/          Airflow DAG orchestrating pipeline
+databricks/
+├── libs/              Data quality validation
+├── notebooks/
+│   ├── bronze/        Ingestion (3)
+│   ├── silver/        Transform (3)
+│   └── gold/          Analytics (4)
+infrastructure/        Pulumi Azure IaC
+scripts/               Data generation
+tests/                 Unit tests
+docker-compose.yml     Airflow stack
 ```
 
-## Tech Stack
-
-- PySpark
-- Delta Lake
-- Azure Databricks
-- Azure Data Lake
-
-## Test Data
-
-- 50,000 customers
-- 5,000 merchants
-- 1,000,000 transactions
-
-## Setup
+## Quick Start
 
 ```bash
-pip install -r requirements.txt
+docker-compose up -d
+```
+
+Access Airflow: http://localhost:8080 (airflow/airflow)
+
+Configure Databricks:
+- Admin → Connections → Add Databricks
+- Admin → Variables → databricks_cluster_id
+
+Deploy infrastructure:
+```bash
+cd infrastructure && pulumi up
+```
+
+Generate data:
+```bash
 python scripts/generate_data.py
-python scripts/corrupt_data.py
 python scripts/upload_to_datalake.py
 ```
 
-Then run notebooks: bronze → silver → gold
+## Key Features
 
-## What It Handles
-
-- Invalid emails and missing data
-- Negative amounts
-- Bad currencies/channels
-- Typos in city/country names
+- Custom data quality validation framework
+- Apache Airflow orchestration with Docker
+- Distributed PySpark processing
+- Delta Lake ACID transactions
+- Infrastructure as Code with Pulumi
+- Unit testing with pytest

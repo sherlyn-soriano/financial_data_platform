@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, upper, trim, current_timestamp
+from pyspark.sql.functions import col, when, trim, current_timestamp
 import os
 import sys
 from pathlib import Path
@@ -11,7 +11,7 @@ else:
     libs_path = Path(__file__).parent.parent.parent / "libs"
     sys.path.insert(0, str(libs_path))
 
-from silver_check import add_quality_flags_customers, generate_quality_summary, print_quality_summary
+from silver_check import add_quality_flags_customers
 
 spark: SparkSession
 
@@ -37,13 +37,12 @@ silver_customers = (bronze_df
         "customer_id", "first_name", "last_name", "email", "phone", "dni",
         "date_of_birth", "registration_date", "city", "district", "country",
         "customer_segment", "risk_score", "account_balance", "credit_limit",
-        "is_active", "created_at", "updated_at", "processed_timestamp"
+        "is_active", "created_at", "processed_timestamp"
     ))
 
-quality_report = validate_silver_customers(silver_customers)
-print(quality_report.summary())
+silver_customers_with_flags = add_quality_flags_customers(silver_customers)
 
-(silver_customers.write
+(silver_customers_with_flags.write
     .format("delta")
     .mode("overwrite")
     .option("mergeSchema", "true")

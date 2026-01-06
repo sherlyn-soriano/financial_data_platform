@@ -1,7 +1,17 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, count, sum, avg, current_timestamp, when
 import os
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
+
+if os.path.exists('/Workspace'):
+    sys.path.insert(0, '/Workspace/Repos/databricks/libs')
+else:
+    libs_path = Path(__file__).parent.parent.parent / "libs"
+    sys.path.insert(0, str(libs_path))
+
+from gold_check import add_quality_flags_aggregations
 
 spark: SparkSession
 
@@ -28,7 +38,10 @@ fraud_analysis = (transactions_df
     .withColumn("calculated_at", current_timestamp())
     .orderBy(col("fraud_rate").desc()))
 
-(fraud_analysis.write
+metric_columns = ["total_transactions", "fraud_transactions", "fraud_amount", "avg_customer_risk", "fraud_rate"]
+fraud_analysis_with_flags = add_quality_flags_aggregations(fraud_analysis, metric_columns)
+
+(fraud_analysis_with_flags.write
     .format("delta")
     .mode("overwrite")
     .option("mergeSchema", "true")

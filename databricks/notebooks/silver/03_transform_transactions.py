@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, when, to_timestamp, current_timestamp
+from pyspark.sql.functions import col, to_timestamp, current_timestamp
 import os
 import sys
 from pathlib import Path
@@ -11,7 +11,7 @@ else:
     libs_path = Path(__file__).parent.parent.parent / "libs"
     sys.path.insert(0, str(libs_path))
 
-from silver_check import add_quality_flags_transactions, generate_quality_summary, print_quality_summary
+from silver_check import add_quality_flags_transactions
 
 spark: SparkSession
 
@@ -39,13 +39,12 @@ silver_transactions = (bronze_df
         "amount", "currency", "transaction_type", "channel", "device_id",
         "ip_address", "location_lat", "location_lon", "card_type", "card_last_4",
         "status", "is_fraud", "fraud_reason", "processing_fee",
-        "created_at", "updated_at", "processed_timestamp"
+        "created_at", "processed_timestamp"
     ))
 
-quality_report = validate_silver_transactions(silver_transactions)
-print(quality_report.summary())
+silver_transactions_with_flags = add_quality_flags_transactions(silver_transactions)
 
-(silver_transactions.write
+(silver_transactions_with_flags.write
     .format("delta")
     .mode("overwrite")
     .option("mergeSchema", "true")

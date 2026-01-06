@@ -86,7 +86,7 @@ def main():
     print("Azure Data Lake Uploader")
 
     if not STORAGE_ACCOUNT_NAME:
-        print("STORAGE_ACCOUNT_NAME not set in enviroment")
+        print("STORAGE_ACCOUNT_NAME not set in environment")
         return 
     
     blob_service_client = get_blob_service_client()

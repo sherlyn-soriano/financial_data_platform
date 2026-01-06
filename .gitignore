@@ -1,12 +1,12 @@
 # Python
 .venv/
 venv/
-___pycache__/
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-#Envs /secrets
+# Envs/secrets
 .env
 .env.*
 *.env
@@ -14,4 +14,7 @@ ___pycache__/
 # IDE
 .vscode/
 .idea/
+
+# Data
+data/
 

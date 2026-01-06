@@ -1,9 +1,15 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import current_timestamp, input_file_name, lit
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DateType, BooleanType
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DateType, BooleanType, ArrayType
+from pyspark.sql import functions as F
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
+
+if not os.path.exists('/Workspace'):
+    libs_path = Path(__file__).parent.parent.parent / "libs"
+    sys.path.insert(0, str(libs_path))
 
 spark: SparkSession
 
@@ -36,7 +42,11 @@ bronze_merchants = (merchants_df
     .withColumn("source_file", input_file_name())
     .withColumn("data_source", lit("azure_json")))
 
-(bronze_merchants.write
+bronze_merchants_with_quality = (bronze_merchants
+    .withColumn('quality_issues', F.array().cast(ArrayType(StringType())))
+    .withColumn('is_valid', F.lit(True)))
+
+(bronze_merchants_with_quality.write
     .format('delta')
     .mode('overwrite')
     .option('mergeSchema', 'true')

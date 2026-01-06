@@ -1,7 +1,17 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, count, sum, avg, max, min, current_timestamp
+from pyspark.sql.functions import count, sum, avg, current_timestamp
 import os
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
+
+if os.path.exists('/Workspace'):
+    sys.path.insert(0, '/Workspace/Repos/databricks/libs')
+else:
+    libs_path = Path(__file__).parent.parent.parent / "libs"
+    sys.path.insert(0, str(libs_path))
+
+from gold_check import add_quality_flags_aggregations
 
 spark: SparkSession
 
@@ -25,7 +35,10 @@ customer_metrics = (customers_df
     .withColumn("calculated_at", current_timestamp())
     .orderBy("customer_segment", "city"))
 
-(customer_metrics.write
+metric_columns = ["customer_count", "avg_risk_score", "avg_balance", "avg_credit_limit", "total_balance"]
+customer_metrics_with_flags = add_quality_flags_aggregations(customer_metrics, metric_columns)
+
+(customer_metrics_with_flags.write
     .format("delta")
     .mode("overwrite")
     .option("mergeSchema", "true")

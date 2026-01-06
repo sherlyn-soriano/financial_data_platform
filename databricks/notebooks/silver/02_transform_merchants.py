@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, trim, upper, current_timestamp
+from pyspark.sql.functions import col, trim, upper, when, current_timestamp
 import os
 import sys
 from pathlib import Path
@@ -11,7 +11,7 @@ else:
     libs_path = Path(__file__).parent.parent.parent / "libs"
     sys.path.insert(0, str(libs_path))
 
-from silver_check import add_quality_flags_merchants, generate_quality_summary, print_quality_summary
+from silver_check import add_quality_flags_merchants
 
 spark: SparkSession
 
@@ -37,10 +37,9 @@ silver_merchants = (bronze_df
         "city", "country", "is_verified", "registration_date", "processed_timestamp"
     ))
 
-quality_report = validate_silver_merchants(silver_merchants)
-print(quality_report.summary())
+silver_merchants_with_flags = add_quality_flags_merchants(silver_merchants)
 
-(silver_merchants.write
+(silver_merchants_with_flags.write
     .format("delta")
     .mode("overwrite")
     .option("mergeSchema", "true")

@@ -1,7 +1,17 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, count, sum, avg, countDistinct, current_timestamp, when
 import os
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
+
+if os.path.exists('/Workspace'):
+    sys.path.insert(0, '/Workspace/Repos/databricks/libs')
+else:
+    libs_path = Path(__file__).parent.parent.parent / "libs"
+    sys.path.insert(0, str(libs_path))
+
+from gold_check import add_quality_flags_aggregations
 
 spark: SparkSession
 
@@ -30,7 +40,10 @@ merchant_performance = (transactions_df
     .withColumn("calculated_at", current_timestamp())
     .orderBy(col("total_revenue").desc()))
 
-(merchant_performance.write
+metric_columns = ["transaction_count", "unique_customers", "total_revenue", "avg_transaction_value", "successful_transactions", "failed_transactions", "success_rate"]
+merchant_performance_with_flags = add_quality_flags_aggregations(merchant_performance, metric_columns)
+
+(merchant_performance_with_flags.write
     .format("delta")
     .mode("overwrite")
     .option("mergeSchema", "true")
